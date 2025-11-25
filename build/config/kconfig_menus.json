@@ -9397,7 +9397,10 @@
                                 "help": "The minimum rssi to accept in the scan mode.",
                                 "id": "EXAMPLE_WIFI_SCAN_RSSI_THRESHOLD",
                                 "name": "EXAMPLE_WIFI_SCAN_RSSI_THRESHOLD",
-                                "range": null,
+                                "range": [
+                                    -127,
+                                    0
+                                ],
                                 "title": "WiFi minimum rssi",
                                 "type": "int"
                             },
@@ -9694,10 +9697,7 @@
                         "help": "Set the GPIO number used by SMI MDC.",
                         "id": "EXAMPLE_ETH_MDC_GPIO",
                         "name": "EXAMPLE_ETH_MDC_GPIO",
-                        "range": [
-                            0,
-                            54
-                        ],
+                        "range": null,
                         "title": "SMI MDC GPIO number",
                         "type": "int"
                     },
@@ -9707,10 +9707,7 @@
                         "help": "Set the GPIO number used by SMI MDIO.",
                         "id": "EXAMPLE_ETH_MDIO_GPIO",
                         "name": "EXAMPLE_ETH_MDIO_GPIO",
-                        "range": [
-                            0,
-                            54
-                        ],
+                        "range": null,
                         "title": "SMI MDIO GPIO number",
                         "type": "int"
                     },
@@ -9790,10 +9787,7 @@
                         "help": "Set the GPIO number used to reset PHY chip.\nSet to -1 to disable PHY chip hardware reset.",
                         "id": "EXAMPLE_ETH_PHY_RST_GPIO",
                         "name": "EXAMPLE_ETH_PHY_RST_GPIO",
-                        "range": [
-                            -1,
-                            54
-                        ],
+                        "range": null,
                         "title": "PHY Reset GPIO number",
                         "type": "int"
                     },
@@ -9803,10 +9797,7 @@
                         "help": "Set PHY address according your board schematic.",
                         "id": "EXAMPLE_ETH_PHY_ADDR",
                         "name": "EXAMPLE_ETH_PHY_ADDR",
-                        "range": [
-                            0,
-                            31
-                        ],
+                        "range": null,
                         "title": "PHY Address",
                         "type": "int"
                     }
@@ -38787,10 +38778,7 @@
                                                 "help": "Set the maximum gain limit that can be applied by upper-level applications.\n\nValue is gain multiplied by 1000 to avoid floating-point arithmetic:\n- 4000 = 4x gain (minimum)\n- 66016 = 66.016x gain (default)\n- 126016 = 126.016x gain (maximum)\n\nLower values reduce noise but may limit low-light performance.\nHigher values improve low-light sensitivity but increase noise and\nmay cause sensor overheating.\n\nRecommended values:\n- 32000 (32x): Good balance for most applications\n- 66016 (66x): Enhanced low-light performance\n- 126016 (126x): Maximum sensitivity (use with caution)",
                                                 "id": "CAMERA_SC2336_ABSOLUTE_GAIN_LIMIT",
                                                 "name": "CAMERA_SC2336_ABSOLUTE_GAIN_LIMIT",
-                                                "range": [
-                                                    4000,
-                                                    126016
-                                                ],
+                                                "range": null,
                                                 "title": "Maximum absolute gain limit (x1000)",
                                                 "type": "int"
                                             },

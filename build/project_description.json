@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "simple_video_server",
-    "project_version":    "1",
+    "project_version":    "1a72357-dirty",
     "project_path":       "C:/Users/Leone/OneDrive/Desktop/simple_video_server",
     "idf_path":           "C:/Users/Leone/esp/v5.5.1/esp-idf",
     "build_dir":          "C:/Users/Leone/OneDrive/Desktop/simple_video_server/build",
@@ -1090,8 +1090,8 @@
             "managed_reqs": [],
             "managed_priv_reqs": [ "espressif__cmake_utilities", "espressif__esp_sccb_intf" ],
             "file": "C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/espressif__esp_cam_sensor/libespressif__esp_cam_sensor.a",
-            "sources": [ "C:/Users/Leone/OneDrive/Desktop/simple_video_server/managed_components/espressif__esp_cam_sensor/src/esp_cam_sensor.c", "C:/Users/Leone/OneDrive/Desktop/simple_video_server/managed_components/espressif__esp_cam_sensor/src/esp_cam_sensor_xclk.c", "C:/Users/Leone/OneDrive/Desktop/simple_video_server/managed_components/espressif__esp_cam_sensor/src/esp_cam_motor.c", "C:/Users/Leone/OneDrive/Desktop/simple_video_server/managed_components/espressif__esp_cam_sensor/src/driver_cam/esp_cam_ctlr_spi_cam.c", "C:/Users/Leone/OneDrive/Desktop/simple_video_server/managed_components/espressif__esp_cam_sensor/src/driver_spi/spi_slave.c", "C:/Users/Leone/OneDrive/Desktop/simple_video_server/managed_components/espressif__esp_cam_sensor/sensors/sc2336/sc2336.c" ],
-            "include_dirs": [ "include", "sensors/sc2336/include" ]
+            "sources": [ "C:/Users/Leone/OneDrive/Desktop/simple_video_server/managed_components/espressif__esp_cam_sensor/src/esp_cam_sensor.c", "C:/Users/Leone/OneDrive/Desktop/simple_video_server/managed_components/espressif__esp_cam_sensor/src/esp_cam_sensor_xclk.c", "C:/Users/Leone/OneDrive/Desktop/simple_video_server/managed_components/espressif__esp_cam_sensor/src/esp_cam_motor.c", "C:/Users/Leone/OneDrive/Desktop/simple_video_server/managed_components/espressif__esp_cam_sensor/src/driver_cam/esp_cam_ctlr_spi_cam.c", "C:/Users/Leone/OneDrive/Desktop/simple_video_server/managed_components/espressif__esp_cam_sensor/src/driver_spi/spi_slave.c", "C:/Users/Leone/OneDrive/Desktop/simple_video_server/managed_components/espressif__esp_cam_sensor/sensors/ov5647/ov5647.c" ],
+            "include_dirs": [ "include", "sensors/ov5647/include" ]
         },
         "espressif__esp_h264": {
             "alias": "idf::espressif__esp_h264",
@@ -1585,7 +1585,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/protocol_examples_common/libprotocol_examples_common.a",
-            "sources": [ "C:/Users/Leone/esp/v5.5.1/esp-idf/examples/common_components/protocol_examples_common/stdin_out.c", "C:/Users/Leone/esp/v5.5.1/esp-idf/examples/common_components/protocol_examples_common/addr_from_stdin.c", "C:/Users/Leone/esp/v5.5.1/esp-idf/examples/common_components/protocol_examples_common/connect.c", "C:/Users/Leone/esp/v5.5.1/esp-idf/examples/common_components/protocol_examples_common/wifi_connect.c", "C:/Users/Leone/esp/v5.5.1/esp-idf/examples/common_components/protocol_examples_common/protocol_examples_utils.c", "C:/Users/Leone/esp/v5.5.1/esp-idf/examples/common_components/protocol_examples_common/eth_connect.c" ],
+            "sources": [ "C:/Users/Leone/esp/v5.5.1/esp-idf/examples/common_components/protocol_examples_common/stdin_out.c", "C:/Users/Leone/esp/v5.5.1/esp-idf/examples/common_components/protocol_examples_common/addr_from_stdin.c", "C:/Users/Leone/esp/v5.5.1/esp-idf/examples/common_components/protocol_examples_common/connect.c", "C:/Users/Leone/esp/v5.5.1/esp-idf/examples/common_components/protocol_examples_common/wifi_connect.c", "C:/Users/Leone/esp/v5.5.1/esp-idf/examples/common_components/protocol_examples_common/protocol_examples_utils.c", "C:/Users/Leone/esp/v5.5.1/esp-idf/examples/common_components/protocol_examples_common/console_cmd.c" ],
             "include_dirs": [ "include" ]
         },
         "protocomm": {
@@ -3184,7 +3184,7 @@
             "priv_reqs": [ "esp_timer", "espressif__cmake_utilities", "espressif__esp_sccb_intf" ],
             "managed_reqs": [],
             "managed_priv_reqs": [ "espressif__cmake_utilities", "espressif__esp_sccb_intf" ],
-            "include_dirs": [ "include", "sensors/sc2336/include" ]
+            "include_dirs": [ "include", "sensors/ov5647/include" ]
         },
         "espressif__esp_h264": {
             "alias": "idf::espressif__esp_h264",
