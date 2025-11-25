@@ -972,3 +972,10 @@ C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/example_video_
 C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/example_video_common/CMakeFiles/install.dir
 C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/example_video_common/CMakeFiles/install/local.dir
 C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/example_video_common/CMakeFiles/install/strip.dir
+C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/imx662/CMakeFiles/__idf_imx662.dir
+C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/imx662/CMakeFiles/edit_cache.dir
+C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/imx662/CMakeFiles/rebuild_cache.dir
+C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/imx662/CMakeFiles/list_install_components.dir
+C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/imx662/CMakeFiles/install.dir
+C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/imx662/CMakeFiles/install/local.dir
+C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/imx662/CMakeFiles/install/strip.dir

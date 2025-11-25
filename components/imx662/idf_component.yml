@@ -1,0 +1,6 @@
+version: "1.0.0"
+description: "Sony IMX662 CMOS Camera Sensor Driver for ESP-IDF"
+url: "https://github.com/espressif/esp-video-components"
+dependencies:
+  idf: ">=5.0"
+  espressif/esp_cam_sensor: ">=0.5.3"

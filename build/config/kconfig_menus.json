@@ -36322,6 +36322,91 @@
                         "children": [
                             {
                                 "children": [],
+                                "depends_on": "CAMERA_IMX662 && SOC_MIPI_CSI_SUPPORTED",
+                                "help": "Enable auto-detection of IMX662 sensor on MIPI-CSI bus.",
+                                "id": "CAMERA_IMX662_AUTO_DETECT",
+                                "name": "CAMERA_IMX662_AUTO_DETECT",
+                                "range": null,
+                                "title": "Auto detect IMX662 sensor",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "CAMERA_IMX662 && SOC_MIPI_CSI_SUPPORTED",
+                                "help": "Maximum number of IMX662 sensors that can be connected.",
+                                "id": "CAMERA_IMX662_MAX_SUPPORT",
+                                "name": "CAMERA_IMX662_MAX_SUPPORT",
+                                "range": [
+                                    1,
+                                    2
+                                ],
+                                "title": "Maximum number of IMX662 sensors supported",
+                                "type": "int"
+                            },
+                            {
+                                "children": [
+                                    {
+                                        "children": [],
+                                        "depends_on": "<choice CAMERA_IMX662_DEFAULT_FORMAT>",
+                                        "help": null,
+                                        "id": "CAMERA_IMX662_RAW12_1920X1080_30FPS",
+                                        "name": "CAMERA_IMX662_RAW12_1920X1080_30FPS",
+                                        "range": null,
+                                        "title": "RAW12 1920x1080 @ 30fps",
+                                        "type": "bool"
+                                    },
+                                    {
+                                        "children": [],
+                                        "depends_on": "<choice CAMERA_IMX662_DEFAULT_FORMAT>",
+                                        "help": null,
+                                        "id": "CAMERA_IMX662_RAW12_1920X1080_60FPS",
+                                        "name": "CAMERA_IMX662_RAW12_1920X1080_60FPS",
+                                        "range": null,
+                                        "title": "RAW12 1920x1080 @ 60fps",
+                                        "type": "bool"
+                                    }
+                                ],
+                                "depends_on": "CAMERA_IMX662 && SOC_MIPI_CSI_SUPPORTED",
+                                "help": "Select the default capture format for IMX662.",
+                                "id": "component-config-imx662-camera-sensor-configuration-enable-imx662-camera-sensor-driver-default-capture-format",
+                                "name": "CAMERA_IMX662_DEFAULT_FORMAT",
+                                "title": "Default capture format",
+                                "type": "choice"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "CAMERA_IMX662 && SOC_MIPI_CSI_SUPPORTED",
+                                "help": "Number of MIPI CSI lanes to use (2 or 4).",
+                                "id": "CAMERA_IMX662_MIPI_LANE_NUM",
+                                "name": "CAMERA_IMX662_MIPI_LANE_NUM",
+                                "range": [
+                                    2,
+                                    4
+                                ],
+                                "title": "MIPI CSI lane number",
+                                "type": "int"
+                            }
+                        ],
+                        "depends_on": "SOC_MIPI_CSI_SUPPORTED",
+                        "help": "Enable driver for Sony IMX662 camera sensor.\nThis is a 1/2.8\" 2.1MP CMOS sensor with\n1920x1080 resolution and MIPI-CSI interface.",
+                        "id": "CAMERA_IMX662",
+                        "name": "CAMERA_IMX662",
+                        "range": null,
+                        "title": "Enable IMX662 Camera Sensor Driver",
+                        "type": "bool"
+                    }
+                ],
+                "depends_on": "SOC_MIPI_CSI_SUPPORTED",
+                "id": "component-config-imx662-camera-sensor-configuration",
+                "title": "IMX662 Camera Sensor Configuration",
+                "type": "menu"
+            },
+            {
+                "children": [
+                    {
+                        "children": [
+                            {
+                                "children": [],
                                 "depends_on": "CU_RELINKER_ENABLE",
                                 "help": "\"Enable this option to print error information instead of\n    throwing exception when missing function\"",
                                 "id": "CU_RELINKER_ENABLE_PRINT_ERROR_INFO_WHEN_MISSING_FUNCTION",

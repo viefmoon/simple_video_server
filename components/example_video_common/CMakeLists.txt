@@ -24,3 +24,8 @@ idf_component_register(SRCS "${srcs}"
 if(CONFIG_EXAMPLE_SELECT_JPEG_HW_DRIVER)
     idf_component_optional_requires(PRIVATE "esp_driver_jpeg")
 endif()
+
+# Add IMX662 sensor support
+if(CONFIG_CAMERA_IMX662)
+    idf_component_optional_requires(PRIVATE "imx662")
+endif()

@@ -1,0 +1,50 @@
+menu "IMX662 Camera Sensor Configuration"
+    depends on SOC_MIPI_CSI_SUPPORTED
+
+    config CAMERA_IMX662
+        bool "Enable IMX662 Camera Sensor Driver"
+        default n
+        help
+            Enable driver for Sony IMX662 camera sensor.
+            This is a 1/2.8" 2.1MP CMOS sensor with
+            1920x1080 resolution and MIPI-CSI interface.
+
+    config CAMERA_IMX662_AUTO_DETECT
+        bool "Auto detect IMX662 sensor"
+        default y
+        depends on CAMERA_IMX662
+        help
+            Enable auto-detection of IMX662 sensor on MIPI-CSI bus.
+
+    config CAMERA_IMX662_MAX_SUPPORT
+        int "Maximum number of IMX662 sensors supported"
+        default 1
+        range 1 2
+        depends on CAMERA_IMX662
+        help
+            Maximum number of IMX662 sensors that can be connected.
+
+    choice CAMERA_IMX662_DEFAULT_FORMAT
+        prompt "Default capture format"
+        default CAMERA_IMX662_RAW12_1920X1080_30FPS
+        depends on CAMERA_IMX662
+        help
+            Select the default capture format for IMX662.
+
+        config CAMERA_IMX662_RAW12_1920X1080_30FPS
+            bool "RAW12 1920x1080 @ 30fps"
+
+        config CAMERA_IMX662_RAW12_1920X1080_60FPS
+            bool "RAW12 1920x1080 @ 60fps"
+
+    endchoice
+
+    config CAMERA_IMX662_MIPI_LANE_NUM
+        int "MIPI CSI lane number"
+        default 2
+        range 2 4
+        depends on CAMERA_IMX662
+        help
+            Number of MIPI CSI lanes to use (2 or 4).
+
+endmenu

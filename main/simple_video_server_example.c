@@ -404,6 +404,14 @@ static esp_err_t image_stream_handler(httpd_req_t *req)
     bool locked = false;
     web_cam_video_t *video = (web_cam_video_t *)req->user_ctx;
 
+    /* Frame reception debugging */
+    uint32_t frame_count = 0;
+    int64_t start_time = esp_timer_get_time();
+    int64_t last_log_time = start_time;
+
+    ESP_LOGI(TAG, "=== STREAM HANDLER STARTED for video%d ===", video->index);
+    ESP_LOGI(TAG, "Waiting for frames from camera (VIDIOC_DQBUF)...");
+
     ESP_RETURN_ON_FALSE(snprintf(http_string, sizeof(http_string), "%" PRIu32, video->frame_rate) > 0,
                         ESP_FAIL, TAG, "failed to format framerate buffer");
 
@@ -421,8 +429,32 @@ static esp_err_t image_stream_handler(httpd_req_t *req)
         memset(&buf, 0, sizeof(buf));
         buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         buf.memory = V4L2_MEMORY_MMAP;
-        ESP_RETURN_ON_ERROR(ioctl(video->fd, VIDIOC_DQBUF, &buf), TAG, "failed to receive video frame");
+
+        /* Log before attempting to dequeue - this will show if we're blocked waiting for frames */
+        if (frame_count == 0) {
+            ESP_LOGI(TAG, "Calling VIDIOC_DQBUF (first frame)...");
+        }
+
+        int dqbuf_result = ioctl(video->fd, VIDIOC_DQBUF, &buf);
+        if (dqbuf_result != 0) {
+            ESP_LOGE(TAG, "VIDIOC_DQBUF failed with errno=%d (%s)", errno, strerror(errno));
+            return ESP_FAIL;
+        }
+
+        /* Frame received! Log details */
+        frame_count++;
+        int64_t now = esp_timer_get_time();
+
+        /* Log first frame and then every 30 frames (approximately once per second at 30fps) */
+        if (frame_count == 1 || (frame_count % 30) == 0) {
+            float elapsed_sec = (now - start_time) / 1000000.0f;
+            float fps = frame_count / elapsed_sec;
+            ESP_LOGI(TAG, "*** FRAME RECEIVED! *** count=%"PRIu32" size=%"PRIu32" bytes, avg_fps=%.1f",
+                     frame_count, buf.bytesused, fps);
+        }
+
         if (!(buf.flags & V4L2_BUF_FLAG_DONE)) {
+            ESP_LOGW(TAG, "Frame not marked DONE (flags=0x%x), requeuing", buf.flags);
             ESP_RETURN_ON_ERROR(ioctl(video->fd, VIDIOC_QBUF, &buf), TAG, "failed to queue video frame");
             continue;
         }
@@ -432,6 +464,16 @@ static esp_err_t image_stream_handler(httpd_req_t *req)
         if (video->pixel_format == V4L2_PIX_FMT_JPEG) {
             video->jpeg_out_buf = video->buffer[buf.index];
             jpeg_encoded_size = buf.bytesused;
+        } else if (video->pixel_format == V4L2_PIX_FMT_SBGGR12 ||
+                   video->pixel_format == V4L2_PIX_FMT_SBGGR10 ||
+                   video->pixel_format == V4L2_PIX_FMT_SBGGR8) {
+            /* RAW Bayer formats - skip JPEG encoding for now, just log success */
+            /* The camera is working! For production, implement debayering + JPEG encoding */
+            ESP_LOGI(TAG, "RAW frame received: %"PRIu32" bytes (skipping JPEG encode)", buf.bytesused);
+
+            /* Requeue the buffer and continue without sending to browser */
+            ESP_RETURN_ON_ERROR(ioctl(video->fd, VIDIOC_QBUF, &buf), TAG, "failed to queue video frame");
+            continue;  /* Skip sending this frame, wait for next */
         } else {
             ESP_GOTO_ON_FALSE(xSemaphoreTake(video->sem, portMAX_DELAY) == pdPASS, ESP_FAIL, fail0, TAG, "failed to take semaphore");
             locked = true;
@@ -545,6 +587,16 @@ static esp_err_t init_web_cam_video(web_cam_video_t *video, const web_cam_video_
 
     if (video->pixel_format == V4L2_PIX_FMT_JPEG) {
         ESP_GOTO_ON_ERROR(set_camera_jpeg_quality(video, EXAMPLE_JPEG_ENC_QUALITY), fail0, TAG, "failed to set jpeg quality");
+    } else if (video->pixel_format == V4L2_PIX_FMT_SBGGR12 ||
+               video->pixel_format == V4L2_PIX_FMT_SBGGR10 ||
+               video->pixel_format == V4L2_PIX_FMT_SBGGR8) {
+        /* RAW Bayer formats - skip encoder init, we'll handle these differently */
+        ESP_LOGW(TAG, "RAW Bayer format detected - JPEG encoding disabled");
+        ESP_LOGW(TAG, "Camera is working! Frames will be logged but not streamed.");
+        video->encoder_handle = NULL;
+        video->jpeg_out_buf = NULL;
+        video->jpeg_out_size = 0;
+        video->support_control_jpeg_quality = 0;
     } else {
         example_encoder_config_t encoder_config = {0};
 
@@ -774,6 +826,11 @@ static void initialise_mdns(void)
 
 void app_main(void)
 {
+    /* Enable debug logging for CSI driver */
+    esp_log_level_set("csi_video", ESP_LOG_DEBUG);
+    esp_log_level_set("mipi_csi", ESP_LOG_DEBUG);
+    esp_log_level_set("cam_ctlr", ESP_LOG_DEBUG);
+
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         // NVS partition was truncated and needs to be erased

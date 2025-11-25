@@ -637,3 +637,8 @@ if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   include("C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/example_video_common/cmake_install.cmake")
 endif()
 
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("C:/Users/Leone/OneDrive/Desktop/simple_video_server/build/esp-idf/imx662/cmake_install.cmake")
+endif()
+

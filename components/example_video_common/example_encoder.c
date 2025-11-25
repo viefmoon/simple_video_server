@@ -75,6 +75,22 @@ esp_err_t example_encoder_init(example_encoder_config_t *config, example_encoder
         jpeg_enc_config.sub_sample = JPEG_DOWN_SAMPLING_GRAY;
         jpeg_enc_input_src_size = config->width * config->height;
         break;
+    case V4L2_PIX_FMT_SBGGR10: // RAW10 Bayer - treat as grayscale (testing only)
+        ESP_LOGW(TAG, "RAW10 format - treating as grayscale (Bayer pattern ignored)");
+        jpeg_enc_config.src_type = JPEG_ENCODE_IN_FORMAT_GRAY;
+        jpeg_enc_config.sub_sample = JPEG_DOWN_SAMPLING_GRAY;
+        /* RAW10 is 10 bits/pixel, packed as 5 bytes per 4 pixels or 2 bytes per pixel padded
+         * Using 2 bytes/pixel assumption, will extract high byte for grayscale */
+        jpeg_enc_input_src_size = config->width * config->height * 2;
+        break;
+    case V4L2_PIX_FMT_SBGGR12: // RAW12 Bayer - treat as grayscale (testing only)
+        ESP_LOGW(TAG, "RAW12 format - treating as grayscale (Bayer pattern ignored)");
+        jpeg_enc_config.src_type = JPEG_ENCODE_IN_FORMAT_GRAY;
+        jpeg_enc_config.sub_sample = JPEG_DOWN_SAMPLING_GRAY;
+        /* RAW12 is 12 bits/pixel, stored as 2 bytes per pixel (16-bit padded)
+         * Will extract high byte for grayscale */
+        jpeg_enc_input_src_size = config->width * config->height * 2;
+        break;
     case V4L2_PIX_FMT_RGB565:
         jpeg_enc_config.src_type = JPEG_ENCODE_IN_FORMAT_RGB565;
         jpeg_enc_config.sub_sample = JPEG_DOWN_SAMPLING_YUV422;
@@ -91,7 +107,7 @@ esp_err_t example_encoder_init(example_encoder_config_t *config, example_encoder
         jpeg_enc_input_src_size = config->width * config->height * 2;
         break;
     default:
-        ESP_LOGE(TAG, "Unsupported format");
+        ESP_LOGE(TAG, "Unsupported format: 0x%08lx", (unsigned long)config->pixel_format);
         return ESP_ERR_NOT_SUPPORTED;
     }
 
@@ -111,13 +127,25 @@ esp_err_t example_encoder_init(example_encoder_config_t *config, example_encoder
         jpeg_enc_config.subsampling = JPEG_SUBSAMPLE_GRAY;
         jpeg_enc_input_src_size = config->width * config->height;
         break;
+    case V4L2_PIX_FMT_SBGGR10: // RAW10 Bayer - treat as grayscale (testing only)
+        ESP_LOGW(TAG, "RAW10 format - treating as grayscale (Bayer pattern ignored)");
+        jpeg_enc_config.src_type = JPEG_PIXEL_FORMAT_GRAY;
+        jpeg_enc_config.subsampling = JPEG_SUBSAMPLE_GRAY;
+        jpeg_enc_input_src_size = config->width * config->height * 2;
+        break;
+    case V4L2_PIX_FMT_SBGGR12: // RAW12 Bayer - treat as grayscale (testing only)
+        ESP_LOGW(TAG, "RAW12 format - treating as grayscale (Bayer pattern ignored)");
+        jpeg_enc_config.src_type = JPEG_PIXEL_FORMAT_GRAY;
+        jpeg_enc_config.subsampling = JPEG_SUBSAMPLE_GRAY;
+        jpeg_enc_input_src_size = config->width * config->height * 2;
+        break;
     case V4L2_PIX_FMT_YUV422P:
         jpeg_enc_config.src_type = JPEG_PIXEL_FORMAT_YCbYCr;
         jpeg_enc_config.subsampling = JPEG_SUBSAMPLE_422;
         jpeg_enc_input_src_size = config->width * config->height * 2;
         break;
     default:
-        ESP_LOGE(TAG, "Unsupported format");
+        ESP_LOGE(TAG, "Unsupported format: 0x%08lx", (unsigned long)config->pixel_format);
         return ESP_ERR_NOT_SUPPORTED;
     }
 

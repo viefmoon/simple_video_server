@@ -38,7 +38,7 @@ dependencies:
       require: private
       version: '>=5.3'
     source:
-      registry_url: https://components.espressif.com
+      registry_url: https://components.espressif.com/
       type: service
     targets:
     - esp32p4
@@ -248,12 +248,13 @@ dependencies:
       type: local
     version: '*'
 direct_dependencies:
+- espressif/esp_cam_sensor
 - espressif/esp_new_jpeg
 - espressif/esp_video
 - espressif/esp_wifi_remote
 - espressif/mdns
 - idf
 - protocol_examples_common
-manifest_hash: 86575a07e77eba7784dbf9c43efe630ae3e77957ab33a93a7135b1f2a9217818
+manifest_hash: 2edcb44d8cb63833e128cb2d2459394811fcf86773ae21c11e90cb6ccffd9505
 target: esp32p4
 version: 2.0.0
