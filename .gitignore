@@ -46,3 +46,12 @@ __MACOSX/
 frontend/node_modules/
 frontend/dist/
 frontend/gzipped/
+
+# Reference documentation folders (not part of project)
+IMX662_driver_for_raspberry/
+IMX662_module_for_raspberry_pi-main/
+imx662-camera-project-master/
+
+# Captured raw images
+*.raw
+frame_*.jpg
