@@ -1,7 +1,15 @@
 /*
- * RAW10 HTTP Streaming Server for IMX662
+ * RGB888 HTTP Streaming Server for IMX662
  * Based on simple_video_server example
- * Streams RAW Bayer frames for Python viewer to decode
+ *
+ * Pipeline ISP completo:
+ *   RAW10 (sensor) → Demosaic → CCM → Gamma → Color → RGB888 (salida)
+ *
+ * El ISP aplica automáticamente:
+ * - Demosaicing (Bayer → RGB)
+ * - Color Correction Matrix (CCM)
+ * - Gamma correction
+ * - Contrast, Saturation, Hue, Brightness
  */
 
 #include <string.h>
@@ -33,7 +41,7 @@
 static const char *STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" STREAM_BOUNDARY;
 static const char *STREAM_PART = "\r\n--" STREAM_BOUNDARY "\r\nContent-Type: application/octet-stream\r\nContent-Length: %u\r\n\r\n";
 
-static const char *TAG = "raw_streamer";
+static const char *TAG = "rgb_streamer";
 
 /* Camera state */
 typedef struct {
@@ -67,25 +75,40 @@ static esp_err_t init_camera(void)
         return ESP_ERR_NOT_FOUND;
     }
 
-    /* Set format - RGB565 for IMX662
-     * The ISP will convert RAW Bayer to RGB565 automatically.
-     * This avoids the buggy ISP bypass mode that freezes after first frame.
-     * Supported ISP output formats: RGB565, RGB24, YUV420, YUV422P
+    /* Set format - RGB888 output from ISP
+     *
+     * Pipeline ISP completo:
+     *   RAW10 (sensor) → Demosaic → CCM → Gamma → Color → RGB888
+     *
+     * El ISP procesa la imagen automáticamente:
+     * - Demosaicing: convierte Bayer RGGB a RGB
+     * - CCM: aplica matriz de corrección de color
+     * - Gamma: corrección gamma
+     * - Color: ajusta contraste, saturación, tono, brillo
+     *
+     * Frame size: 1936 x 1100 x 3 = 6,388,800 bytes
      */
     memset(&format, 0, sizeof(format));
     format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     format.fmt.pix.width = FRAME_WIDTH;
     format.fmt.pix.height = FRAME_HEIGHT;
-    format.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB565;  /* ISP converts RAW to RGB565 */
+    format.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB24;  /* RGB888 - ISP full pipeline */
     format.fmt.pix.field = V4L2_FIELD_NONE;
 
     if (ioctl(fd, VIDIOC_S_FMT, &format) != 0) {
-        ESP_LOGW(TAG, "Failed to set RGB565 format, reading current...");
-        memset(&format, 0, sizeof(format));
-        format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        ioctl(fd, VIDIOC_G_FMT, &format);
+        ESP_LOGW(TAG, "Failed to set RGB888 format, trying RGB565...");
+        /* Fallback to RGB565 if RGB888 not supported */
+        format.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB565;
+        if (ioctl(fd, VIDIOC_S_FMT, &format) != 0) {
+            ESP_LOGW(TAG, "Failed to set RGB565, reading current...");
+            memset(&format, 0, sizeof(format));
+            format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            ioctl(fd, VIDIOC_G_FMT, &format);
+        } else {
+            ESP_LOGI(TAG, "RGB565 format set successfully!");
+        }
     } else {
-        ESP_LOGI(TAG, "RGB565 format set successfully!");
+        ESP_LOGI(TAG, "RGB888 format set successfully!");
     }
 
     s_camera.fd = fd;
@@ -167,7 +190,7 @@ static esp_err_t capture_handler(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_set_hdr(req, "X-Frame-Width", "1936");
     httpd_resp_set_hdr(req, "X-Frame-Height", "1100");
-    httpd_resp_set_hdr(req, "X-Frame-Format", "RAW10_RGGB");
+    httpd_resp_set_hdr(req, "X-Frame-Format", "RGB888");
 
     esp_err_t ret = httpd_resp_send(req, (char *)s_camera.buffer[buf.index], buf.bytesused);
 
@@ -205,8 +228,11 @@ static esp_err_t stream_handler(httpd_req_t *req)
         buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         buf.memory = V4L2_MEMORY_MMAP;
 
-        ESP_LOGD(TAG, "Waiting for frame (DQBUF)...");
+        ESP_LOGI(TAG, ">>> DQBUF start (waiting for frame %d)...", frame_count + 1);
+        int64_t dqbuf_start = esp_timer_get_time();
         if (ioctl(s_camera.fd, VIDIOC_DQBUF, &buf) != 0) {
+            int64_t elapsed_ms = (esp_timer_get_time() - dqbuf_start) / 1000;
+            ESP_LOGE(TAG, ">>> DQBUF failed after %lld ms", elapsed_ms);
             dqbuf_errors++;
             if (dqbuf_errors <= 5 || dqbuf_errors % 100 == 0) {
                 ESP_LOGE(TAG, "DQBUF failed (errno=%d), errors=%d", errno, dqbuf_errors);
@@ -234,7 +260,12 @@ static esp_err_t stream_handler(httpd_req_t *req)
         ret = httpd_resp_send_chunk(req, (char *)s_camera.buffer[buf.index], buf.bytesused);
 
         /* Re-queue buffer */
-        ioctl(s_camera.fd, VIDIOC_QBUF, &buf);
+        int qbuf_ret = ioctl(s_camera.fd, VIDIOC_QBUF, &buf);
+        if (qbuf_ret != 0) {
+            ESP_LOGE(TAG, ">>> QBUF failed! errno=%d", errno);
+        } else {
+            ESP_LOGI(TAG, ">>> QBUF success, buffer %d re-queued", buf.index);
+        }
         xSemaphoreGive(s_camera.sem);
 
         if (ret != ESP_OK) {
@@ -251,7 +282,7 @@ static esp_err_t status_handler(httpd_req_t *req)
 {
     char json[256];
     snprintf(json, sizeof(json),
-             "{\"width\":%"PRIu32",\"height\":%"PRIu32",\"format\":\"RAW10_RGGB\",\"buffer_size\":%"PRIu32"}",
+             "{\"width\":%"PRIu32",\"height\":%"PRIu32",\"format\":\"RGB888\",\"buffer_size\":%"PRIu32"}",
              s_camera.width, s_camera.height, s_camera.buffer_size);
 
     httpd_resp_set_type(req, "application/json");
@@ -263,10 +294,10 @@ static esp_err_t status_handler(httpd_req_t *req)
 static esp_err_t index_handler(httpd_req_t *req)
 {
     const char *html =
-        "<!DOCTYPE html><html><head><title>IMX662 RAW Streamer</title></head>"
+        "<!DOCTYPE html><html><head><title>IMX662 RGB Streamer</title></head>"
         "<body style='font-family:monospace;padding:20px'>"
-        "<h1>IMX662 RAW10 Streaming Server</h1>"
-        "<p>Resolution: 1936x1100, Format: RAW10 Bayer RGGB</p>"
+        "<h1>IMX662 RGB888 Streaming Server</h1>"
+        "<p>Resolution: 1936x1100, Format: RGB888 (ISP processed)</p>"
         "<h2>Endpoints:</h2>"
         "<ul>"
         "<li><a href='/capture'>/capture</a> - Single RAW frame (for Python viewer)</li>"
@@ -318,7 +349,7 @@ void app_main(void)
 {
     ESP_LOGI(TAG, "");
     ESP_LOGI(TAG, "╔════════════════════════════════════════════════════╗");
-    ESP_LOGI(TAG, "║     IMX662 RAW10 HTTP Streaming Server             ║");
+    ESP_LOGI(TAG, "║     IMX662 RGB888 HTTP Streaming Server            ║");
     ESP_LOGI(TAG, "╚════════════════════════════════════════════════════╝");
     ESP_LOGI(TAG, "");
 

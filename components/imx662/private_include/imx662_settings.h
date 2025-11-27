@@ -111,9 +111,13 @@ static const imx662_reginfo_t imx662_common_init_regs[] = {
      * SHR0 must be between 4 and (VMAX-1) = 4 to 1249
      * Integration time = (VMAX - SHR0) lines
      * Lower SHR0 = longer exposure, Higher SHR0 = shorter exposure
-     * SHR0 = 500 gives medium exposure (~750 lines = 60% of max)
+     *
+     * ANTI-BANDING: Sync with AC light frequency to avoid horizontal lines
+     * At 30fps, VMAX=1250: each line = 26.67μs
+     * For 60Hz lights (120Hz flicker): period = 8.33ms = 312 lines
+     * SHR0 = 313 gives ~937 lines = 3 flicker periods (anti-banding)
      */
-    {0x3050, 0xF4},  /* SHR0_L = 500 (0x01F4) - medium exposure */
+    {0x3050, 0x39},  /* SHR0_L = 313 (0x0139) - synced with 60Hz lighting */
     {0x3051, 0x01},  /* SHR0_M */
     {0x3052, 0x00},  /* SHR0_H */
 
@@ -138,8 +142,9 @@ static const imx662_reginfo_t imx662_common_init_regs[] = {
     {0x306B, 0x00},  /* Sensor register */
     /* GAIN: 0-240 (0.3dB per step). 30=9dB, 60=18dB, 100=30dB
      * For bright indoor: 20-40, Normal indoor: 40-80, Low light: 80-150
+     * NOTE: High gain (>80) causes banding with artificial lighting
      */
-    {0x3070, 0x1E},  /* GAIN = 30 (9dB) - for normal indoor lighting */
+    {0x3070, 0x46},  /* GAIN = 70 (21dB) - balanced for indoor without banding */
     {0x3071, 0x00},
     {0x3072, 0x00},  /* GAIN_1 */
     {0x3073, 0x00},

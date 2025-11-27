@@ -38,10 +38,15 @@ static const char *TAG = "imx662";
  */
 
 /*
- * ISP info for RAW10 - required for proper ISP initialization.
- * The ISP can output RAW10 directly (passthrough mode) when we request
- * V4L2_PIX_FMT_SBGGR10 as output format.
- * IMX662 native Bayer pattern is RGGB.
+ * ISP info para RAW8 output - REQUERIDO para que el ISP funcione correctamente.
+ *
+ * IMPORTANTE PARA NDVI:
+ * - RAW8 conserva el patrón Bayer (RGGB) sin demosaicing
+ * - Cada pixel sigue siendo R, G, o B puro (sin interpolación)
+ * - Pierdes 2 bits de resolución (10→8 bits) pero conservas separación espectral
+ * - Esto es CRÍTICO para calcular NDVI = (NIR - Red) / (NIR + Red)
+ *
+ * El sensor envía RAW10, el ISP lo trunca/convierte a RAW8.
  */
 static const esp_cam_sensor_isp_info_t imx662_isp_info = {
     .isp_v1_info = {
@@ -49,24 +54,36 @@ static const esp_cam_sensor_isp_info_t imx662_isp_info = {
         .pclk = 74250000,
         .vts = 1250,   /* VMAX for 1936x1100 @ 30fps */
         .hts = 1980,   /* HMAX for 1936x1100 @ 30fps */
-        .bayer_type = ESP_CAM_SENSOR_BAYER_RGGB,  /* IMX662 native Bayer pattern */
+        .bayer_type = ESP_CAM_SENSOR_BAYER_RGGB,  /* IMX662 Bayer pattern */
     },
 };
 
 static const esp_cam_sensor_format_t imx662_format_info[] = {
+    /*
+     * FORMAT 0: RAW10 entrada → RAW8 salida via ISP
+     *
+     * Esta configuración:
+     *   1. El sensor envía RAW10 por MIPI-CSI
+     *   2. El ISP convierte a RAW8 (trunca 2 bits LSB)
+     *   3. El patrón Bayer RGGB se conserva intacto
+     *   4. Las interrupciones de frame funcionan correctamente
+     *
+     * Para NDVI: Los datos RAW8 mantienen la separación espectral
+     * necesaria para calcular (NIR - Red) / (NIR + Red)
+     */
     {
-        .name = "MIPI_2lane_74Minput_RAW10_1936x1100_30fps",
-        .format = ESP_CAM_SENSOR_PIXFORMAT_RAW10,
+        .name = "MIPI_2lane_RAW10in_RAW8out_1936x1100_30fps",
+        .format = ESP_CAM_SENSOR_PIXFORMAT_RAW10,  /* Entrada del sensor */
         .port = ESP_CAM_SENSOR_MIPI_CSI,
         .xclk = 74250000,
-        .width = 1936,   /* Full sensor width (matches RPi driver) */
-        .height = 1100,  /* Full sensor height (matches RPi driver) */
-        .regs = imx662_1920x1080_30fps_2lane_raw12,  /* Register array configures RAW10 via ADBIT */
+        .width = 1936,
+        .height = 1100,
+        .regs = imx662_1920x1080_30fps_2lane_raw12,
         .regs_size = sizeof(imx662_1920x1080_30fps_2lane_raw12) / sizeof(imx662_reginfo_t),
         .fps = 30,
-        .isp_info = &imx662_isp_info,  /* ISP can output RAW10 directly */
+        .isp_info = &imx662_isp_info,  /* ISP activo - salida será RAW8 */
         .mipi_info = {
-            .mipi_clk = 720000000,  /* 720 Mbps per lane - matches DATARATE_SEL=0x06 */
+            .mipi_clk = 720000000,
             .lane_num = 2,
             .line_sync_en = false,
         },
