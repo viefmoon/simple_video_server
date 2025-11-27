@@ -27,56 +27,41 @@
 
 static const char *TAG = "imx662";
 
-/* NOTE: ISP info is NOT used because we bypass ISP for this sensor.
- * The IMX662 outputs RAW12 Bayer data directly.
- * If ISP is ever needed, uncomment the isp_info structure and set
- * .isp_info = &imx662_isp_info[0] in the format definitions below.
+/*
+ * Format definitions - RAW10 output only (no ISP)
+ * IMX662 Bayer pattern: RGGB
+ * Post-processing (demosaicing) will be done in software
+ *
+ * MIPI configuration:
+ * - DATARATE_SEL=0x06: 720 Mbps per lane
+ * - 2 lanes × 720 Mbps = 1440 Mbps total bandwidth
  */
 
-/* Format definitions
- * IMPORTANT: mipi_clk is the BIT RATE per lane (not link frequency!)
- * ESP32 CSI driver uses this as lane_bit_rate_mbps directly.
- * MIPI D-PHY uses DDR: bit_rate = link_freq × 2
- * For DATARATE_SEL=0x04: bit_rate=1188 Mbps, link_freq=594 MHz
- *
- * NOTE: isp_info = NULL to BYPASS ISP and receive RAW data directly.
- * The IMX662 outputs RAW12 Bayer data, not RGB. Setting isp_info to a
- * valid pointer would cause ESP32 to expect ISP processing (RAW→RGB),
- * which fails for this sensor. With isp_info = NULL, the ESP32 video
- * system will output RAW12 directly without any ISP processing.
- */
+/* ISP info for RAW10 - specifies Bayer pattern */
+static const esp_cam_sensor_isp_info_t imx662_isp_info = {
+    .isp_v1_info = {
+        .version = SENSOR_ISP_INFO_VERSION_DEFAULT,
+        .pclk = 74250000,
+        .vts = 1125,   /* VMAX for 1936x1100 */
+        .hts = 2200,   /* HMAX for 1936x1100 */
+        .bayer_type = ESP_CAM_SENSOR_BAYER_RGGB,  /* IMX662 native Bayer pattern */
+    },
+};
+
 static const esp_cam_sensor_format_t imx662_format_info[] = {
     {
-        .name = "MIPI_2lane_74Minput_RAW12_1920x1080_30fps",
-        .format = ESP_CAM_SENSOR_PIXFORMAT_RAW12,
+        .name = "MIPI_2lane_74Minput_RAW10_1936x1100_30fps",
+        .format = ESP_CAM_SENSOR_PIXFORMAT_RAW10,
         .port = ESP_CAM_SENSOR_MIPI_CSI,
-        .xclk = 74250000,  /* 74.25MHz - matches your oscillator */
-        .width = 1920,
-        .height = 1080,
-        .regs = imx662_1920x1080_30fps_2lane_raw12,
+        .xclk = 74250000,
+        .width = 1936,   /* Full sensor width (matches RPi driver) */
+        .height = 1100,  /* Full sensor height (matches RPi driver) */
+        .regs = imx662_1920x1080_30fps_2lane_raw12,  /* Register array configures RAW10 via ADBIT */
         .regs_size = sizeof(imx662_1920x1080_30fps_2lane_raw12) / sizeof(imx662_reginfo_t),
         .fps = 30,
-        .isp_info = NULL,  /* NULL = bypass ISP, output RAW12 directly */
+        .isp_info = &imx662_isp_info,  /* Bayer pattern: RGGB */
         .mipi_info = {
-            .mipi_clk = 1188000000,  /* Bit rate 1188 Mbps per lane (DATARATE_SEL=0x04) */
-            .lane_num = 2,
-            .line_sync_en = false,
-        },
-        .reserved = NULL,
-    },
-    {
-        .name = "MIPI_2lane_74Minput_RAW12_1920x1080_60fps",
-        .format = ESP_CAM_SENSOR_PIXFORMAT_RAW12,
-        .port = ESP_CAM_SENSOR_MIPI_CSI,
-        .xclk = 74250000,  /* 74.25MHz */
-        .width = 1920,
-        .height = 1080,
-        .regs = imx662_1920x1080_60fps_2lane_raw12,
-        .regs_size = sizeof(imx662_1920x1080_60fps_2lane_raw12) / sizeof(imx662_reginfo_t),
-        .fps = 60,
-        .isp_info = NULL,  /* NULL = bypass ISP, output RAW12 directly */
-        .mipi_info = {
-            .mipi_clk = 1782000000,  /* Bit rate 1782 Mbps per lane for 60fps */
+            .mipi_clk = 720000000,  /* 720 Mbps per lane - matches DATARATE_SEL=0x06 */
             .lane_num = 2,
             .line_sync_en = false,
         },
@@ -250,6 +235,12 @@ static int imx662_query_para_desc(esp_cam_sensor_device_t *dev, esp_cam_sensor_p
 /* Get parameter */
 static int imx662_get_para_value(esp_cam_sensor_device_t *dev, uint32_t id, void *arg, size_t size)
 {
+    /*
+     * NOTE: ESP_CAM_SENSOR_DATA_SEQ_SHORT_SWAPPED causes crashes with RAW10
+     * because RAW10 is packed (5 bytes per 4 pixels) and doesn't align to 16-bit.
+     *
+     * For now, return NOT_SUPPORTED and handle byte order in post-processing.
+     */
     return ESP_ERR_NOT_SUPPORTED;
 }
 
@@ -378,13 +369,21 @@ static int imx662_priv_ioctl(esp_cam_sensor_device_t *dev, uint32_t cmd, void *a
             ESP_LOGI(TAG, "INCK_SEL (0x3014) = 0x%02X (expect 0x00 for 74.25MHz)", reg_val);
 
             imx662_read(dev->sccb_handle, 0x3015, &reg_val);
-            ESP_LOGI(TAG, "DATARATE_SEL (0x3015) = 0x%02X (expect 0x04 for 1188Mbps)", reg_val);
+            ESP_LOGI(TAG, "DATARATE_SEL (0x3015) = 0x%02X (expect 0x06 for 720Mbps)", reg_val);
 
             imx662_read(dev->sccb_handle, 0x3040, &reg_val);
             ESP_LOGI(TAG, "LANEMODE (0x3040) = 0x%02X (expect 0x01 for 2-lane)", reg_val);
 
             imx662_read(dev->sccb_handle, 0x3022, &reg_val);
-            ESP_LOGI(TAG, "ADBIT (0x3022) = 0x%02X (expect 0x01 for 12bit)", reg_val);
+            ESP_LOGI(TAG, "ADBIT (0x3022) = 0x%02X (expect 0x00 for 10bit)", reg_val);
+
+            /* Verify AD conversion registers match ADBIT setting */
+            imx662_read(dev->sccb_handle, 0x3A50, &reg_val);
+            ESP_LOGI(TAG, "AD_CONV0 (0x3A50) = 0x%02X (expect 0x62 for 10bit, 0xFF for 12bit)", reg_val);
+            imx662_read(dev->sccb_handle, 0x3A51, &reg_val);
+            ESP_LOGI(TAG, "AD_CONV1 (0x3A51) = 0x%02X (expect 0x01 for 10bit, 0x03 for 12bit)", reg_val);
+            imx662_read(dev->sccb_handle, 0x3A52, &reg_val);
+            ESP_LOGI(TAG, "AD_CONV2 (0x3A52) = 0x%02X (expect 0x19 for 10bit, 0x00 for 12bit)", reg_val);
 
             /* Read HMAX */
             uint8_t hmax_l, hmax_h;

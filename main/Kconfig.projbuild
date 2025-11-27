@@ -1,5 +1,22 @@
 menu "Example Configuration"
-    
+
+    choice STREAMER_MODE
+        prompt "Streamer Mode"
+        default STREAMER_MODE_HTTP
+        help
+            Select operation mode
+
+        config STREAMER_MODE_HTTP
+            bool "HTTP Streaming (Python viewer)"
+            help
+                Stream RAW frames over HTTP for Python viewer
+
+        config STREAMER_MODE_SDCARD
+            bool "SD Card Capture"
+            help
+                Capture RAW frames to SD card
+    endchoice
+
     config EXAMPLE_CAMERA_VIDEO_BUFFER_NUMBER
         int "Camera video buffer number"
         default 2

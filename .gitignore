@@ -41,3 +41,8 @@ __MACOSX/
 *.tmp
 *.bak
 *.orig
+
+# Frontend build artifacts (if applicable)
+frontend/node_modules/
+frontend/dist/
+frontend/gzipped/

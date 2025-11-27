@@ -24,15 +24,18 @@ extern "C" {
 #define IMX662_LINK_FREQ_720MHZ     720000000   /* 1440 Mbps/lane, reg=0x03 */
 #define IMX662_LINK_FREQ_891MHZ     891000000   /* 1782 Mbps/lane, reg=0x02 */
 
-/* DATARATE_SEL register values - CRITICAL: these map to link frequencies */
-#define IMX662_DATARATE_2376MBPS    0x00  /* 1188 MHz link freq */
-#define IMX662_DATARATE_2079MBPS    0x01  /* 1039.5 MHz link freq */
-#define IMX662_DATARATE_1782MBPS    0x02  /* 891 MHz link freq - USE FOR 30fps */
-#define IMX662_DATARATE_1440MBPS    0x03  /* 720 MHz link freq */
-#define IMX662_DATARATE_1188MBPS    0x04  /* 594 MHz link freq */
-#define IMX662_DATARATE_891MBPS     0x05  /* 445.5 MHz link freq */
-#define IMX662_DATARATE_720MBPS     0x06  /* 360 MHz link freq */
-#define IMX662_DATARATE_594MBPS     0x07  /* 297 MHz link freq */
+/* DATARATE_SEL register values - maps to MIPI data rate per lane
+ * Link frequency = data_rate / 2 (MIPI uses DDR)
+ * Based on Sony IMX662 datasheet and working Linux driver
+ */
+#define IMX662_DATARATE_2376MBPS    0x00  /* 2376 Mbps/lane, link_freq=1188 MHz */
+#define IMX662_DATARATE_2079MBPS    0x01  /* 2079 Mbps/lane, link_freq=1039.5 MHz */
+#define IMX662_DATARATE_1782MBPS    0x02  /* 1782 Mbps/lane, link_freq=891 MHz */
+#define IMX662_DATARATE_1440MBPS    0x03  /* 1440 Mbps/lane, link_freq=720 MHz */
+#define IMX662_DATARATE_1188MBPS    0x04  /* 1188 Mbps/lane, link_freq=594 MHz - USE THIS FOR 2-LANE 30fps */
+#define IMX662_DATARATE_891MBPS     0x05  /* 891 Mbps/lane, link_freq=445.5 MHz */
+#define IMX662_DATARATE_720MBPS     0x06  /* 720 Mbps/lane, link_freq=360 MHz */
+#define IMX662_DATARATE_594MBPS     0x07  /* 594 Mbps/lane, link_freq=297 MHz */
 
 /* INCK_SEL register values
  * Supported frequencies per Sony datasheet: 24 / 27 / 37.125 / 72 / 74.25 MHz
@@ -64,10 +67,10 @@ static const imx662_reginfo_t imx662_common_init_regs[] = {
 
     /* Clock configuration - 74.25MHz input
      * Your module has a 74.25MHz oscillator (marked "sjk 74.250")
-     * Using 1188Mbps data rate as per working Raspberry Pi driver
+     * Using 720Mbps data rate - this works with ESP32-P4 CSI receiver
      */
     {0x3014, IMX662_INCK_74_25MHZ},     /* INCK_SEL = 74.25MHz */
-    {0x3015, IMX662_DATARATE_1188MBPS}, /* DATARATE_SEL = 1188Mbps (matches RPi driver) */
+    {0x3015, IMX662_DATARATE_720MBPS},  /* DATARATE_SEL = 720Mbps - works with ESP32 */
 
     /* Window mode */
     {0x3018, 0x00},  /* WINMODE = All-pixel */
@@ -80,37 +83,38 @@ static const imx662_reginfo_t imx662_common_init_regs[] = {
     {0x3020, 0x00},  /* HREVERSE */
     {0x3021, 0x00},  /* VREVERSE */
 
-    /* Bit depth - 12bit */
-    {0x3022, 0x01},  /* ADBIT = 12bit */
-    {0x3023, 0x01},  /* MDBIT = 12bit */
+    /* Bit depth - 10bit (changed from 12bit for testing) */
+    {0x3022, 0x00},  /* ADBIT = 10bit (was 0x01 for 12bit) */
+    {0x3023, 0x00},  /* MDBIT = 10bit (was 0x01 for 12bit) */
 
     /* Gain selection */
     {0x3030, 0x00},  /* FDG_SEL0 */
     {0x3031, 0x00},  /* FDG_SEL1 */
     {0x3032, 0x00},  /* FDG_SEL2 */
 
-    /* Pixel window - horizontal */
-    {0x303C, 0x00},  /* PIX_HST[12:0] = 0 */
+    /* Pixel window - horizontal (full sensor width like RPi driver) */
+    {0x303C, 0x00},  /* PIX_HST = 0 (no offset - RPi driver uses this) */
     {0x303D, 0x00},
-    {0x303E, 0x90},  /* PIX_HWIDTH = 1936 */
+    {0x303E, 0x90},  /* PIX_HWIDTH = 1936 (0x0790) - full sensor width */
     {0x303F, 0x07},
 
     /* Lane mode - 2 lanes */
     {0x3040, 0x01},  /* LANEMODE = 2 lanes */
 
-    /* Pixel window - vertical */
-    {0x3044, 0x00},  /* PIX_VST = 0 */
+    /* Pixel window - vertical (full sensor height like RPi driver) */
+    {0x3044, 0x00},  /* PIX_VST = 0 (no offset - RPi driver uses this) */
     {0x3045, 0x00},
-    {0x3046, 0x4C},  /* PIX_VWIDTH = 1100 */
+    {0x3046, 0x4C},  /* PIX_VWIDTH = 1100 (0x044C) - full sensor height */
     {0x3047, 0x04},
 
     /* Exposure (SHR0) - main exposure control
      * SHR0 must be between 4 and (VMAX-1) = 4 to 1249
-     * Integration time = VMAX - SHR0 lines
-     * Default: SHR0 = 8 gives ~1242 lines exposure
+     * Integration time = (VMAX - SHR0) lines
+     * Lower SHR0 = longer exposure, Higher SHR0 = shorter exposure
+     * SHR0 = 500 gives medium exposure (~750 lines = 60% of max)
      */
-    {0x3050, 0x08},  /* SHR0_L = 8 */
-    {0x3051, 0x00},  /* SHR0_M */
+    {0x3050, 0xF4},  /* SHR0_L = 500 (0x01F4) - medium exposure */
+    {0x3051, 0x01},  /* SHR0_M */
     {0x3052, 0x00},  /* SHR0_H */
 
     /* SHR1/SHR2 for HDR modes (not used in normal mode) */
@@ -132,7 +136,10 @@ static const imx662_reginfo_t imx662_common_init_regs[] = {
     /* HDR and gain */
     {0x3069, 0x00},  /* CHDR_GAIN_EN */
     {0x306B, 0x00},  /* Sensor register */
-    {0x3070, 0x00},  /* GAIN */
+    /* GAIN: 0-240 (0.3dB per step). 30=9dB, 60=18dB, 100=30dB
+     * For bright indoor: 20-40, Normal indoor: 40-80, Low light: 80-150
+     */
+    {0x3070, 0x1E},  /* GAIN = 30 (9dB) - for normal indoor lighting */
     {0x3071, 0x00},
     {0x3072, 0x00},  /* GAIN_1 */
     {0x3073, 0x00},
@@ -263,18 +270,17 @@ static const imx662_reginfo_t imx662_common_init_regs[] = {
 
 /*
  * 1920x1080 @ 30fps RAW12 - 2 lanes MIPI
- * Configuration from Sony Software Reference Manual:
- * - DATARATE_SEL = 0x04 (1188 Mbps/lane)
- * - Link frequency = 594 MHz
+ * Configuration that works with ESP32-P4:
+ * - DATARATE_SEL = 0x06 (720 Mbps/lane)
  * - HMAX = 1980 (1H period), VMAX = 1250
  */
 static const imx662_reginfo_t imx662_1920x1080_30fps_2lane_raw12[] = {
     /* Mode specific settings */
-    {0x3015, IMX662_DATARATE_1188MBPS},  /* 1188 Mbps/lane (matches RPi driver) */
+    {0x3015, IMX662_DATARATE_720MBPS},  /* 720 Mbps/lane - works with ESP32 */
     {0x301A, 0x00},  /* WDMODE = Normal (HDR mode select) */
     {0x301B, 0x00},  /* ADDMODE = Non-binning (Normal/binning) */
-    {0x3022, 0x01},  /* ADBIT = 12bit */
-    {0x3023, 0x01},  /* MDBIT = 12bit */
+    {0x3022, 0x00},  /* ADBIT = 10bit (testing RAW10) */
+    {0x3023, 0x00},  /* MDBIT = 10bit (testing RAW10) */
 
     /* HMAX = 1980 (0x07BC) - from Sony manual: 1H period for 30fps */
     {0x302C, 0xBC},  /* HMAX_L = 1980 & 0xFF */
@@ -288,10 +294,14 @@ static const imx662_reginfo_t imx662_1920x1080_30fps_2lane_raw12[] = {
     /* Lane mode = 2 */
     {0x3040, 0x01},
 
-    /* AD conversion for Normal 12bit (from RPi driver) */
-    {0x3A50, 0xFF},  /* Normal 12bit */
-    {0x3A51, 0x03},  /* Normal 12bit */
-    {0x3A52, 0x00},  /* AD 12bit */
+    /* AD conversion for 10-bit mode (from binning mode - 10bit compatible)
+     * These values MUST match ADBIT setting!
+     * For 12-bit: 0x3A50=0xFF, 0x3A51=0x03, 0x3A52=0x00
+     * For 10-bit: 0x3A50=0x62, 0x3A51=0x01, 0x3A52=0x19
+     */
+    {0x3A50, 0x62},  /* 10-bit AD conversion */
+    {0x3A51, 0x01},  /* 10-bit AD conversion */
+    {0x3A52, 0x19},  /* 10-bit AD conversion */
 
     {IMX662_REG_END, 0x00},
 };

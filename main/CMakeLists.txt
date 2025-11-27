@@ -1,10 +1,9 @@
-set(srcs "simple_video_server_example.c")
-set(html_files "../frontend/gzipped/index.html.gz"
-               "../frontend/gzipped/loading.jpg.gz"
-               "../frontend/gzipped/favicon.ico.gz"
-               "../frontend/gzipped/assets/index.js.gz"
-               "../frontend/gzipped/assets/index.css.gz")
+# Select source file based on streamer mode
+if(CONFIG_STREAMER_MODE_HTTP)
+    set(srcs "raw_http_streamer.c")
+else()
+    set(srcs "simple_video_server_example.c")
+endif()
 
 idf_component_register(SRCS "${srcs}"
-                       PRIV_INCLUDE_DIRS .
-                       EMBED_TXTFILES ${html_files})
+                       PRIV_INCLUDE_DIRS .)
