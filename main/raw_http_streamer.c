@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <sys/errno.h>
+#include <errno.h>
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -23,7 +24,7 @@
 #include "example_video_common.h"
 
 /* Configuration */
-#define VIDEO_BUFFER_COUNT      2
+#define VIDEO_BUFFER_COUNT      4  /* Increased from 2 for smoother streaming */
 #define FRAME_WIDTH             1936
 #define FRAME_HEIGHT            1100
 
@@ -66,19 +67,25 @@ static esp_err_t init_camera(void)
         return ESP_ERR_NOT_FOUND;
     }
 
-    /* Set format - RAW10 RGGB for IMX662 */
+    /* Set format - RGB565 for IMX662
+     * The ISP will convert RAW Bayer to RGB565 automatically.
+     * This avoids the buggy ISP bypass mode that freezes after first frame.
+     * Supported ISP output formats: RGB565, RGB24, YUV420, YUV422P
+     */
     memset(&format, 0, sizeof(format));
     format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     format.fmt.pix.width = FRAME_WIDTH;
     format.fmt.pix.height = FRAME_HEIGHT;
-    format.fmt.pix.pixelformat = V4L2_PIX_FMT_SRGGB10;
+    format.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB565;  /* ISP converts RAW to RGB565 */
     format.fmt.pix.field = V4L2_FIELD_NONE;
 
     if (ioctl(fd, VIDIOC_S_FMT, &format) != 0) {
-        ESP_LOGW(TAG, "Failed to set format, reading current...");
+        ESP_LOGW(TAG, "Failed to set RGB565 format, reading current...");
         memset(&format, 0, sizeof(format));
         format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         ioctl(fd, VIDIOC_G_FMT, &format);
+    } else {
+        ESP_LOGI(TAG, "RGB565 format set successfully!");
     }
 
     s_camera.fd = fd;
@@ -86,8 +93,15 @@ static esp_err_t init_camera(void)
     s_camera.height = format.fmt.pix.height;
     s_camera.pixel_format = format.fmt.pix.pixelformat;
 
-    ESP_LOGI(TAG, "Camera: %"PRIu32"x%"PRIu32", format=0x%08lx",
-             s_camera.width, s_camera.height, (unsigned long)s_camera.pixel_format);
+    /* Log format as 4-char code */
+    char fmt_str[5] = {0};
+    fmt_str[0] = (s_camera.pixel_format >> 0) & 0xFF;
+    fmt_str[1] = (s_camera.pixel_format >> 8) & 0xFF;
+    fmt_str[2] = (s_camera.pixel_format >> 16) & 0xFF;
+    fmt_str[3] = (s_camera.pixel_format >> 24) & 0xFF;
+
+    ESP_LOGI(TAG, "Camera: %"PRIu32"x%"PRIu32", format=%s (0x%08lx)",
+             s_camera.width, s_camera.height, fmt_str, (unsigned long)s_camera.pixel_format);
 
     /* Request buffers */
     memset(&req, 0, sizeof(req));
@@ -170,6 +184,8 @@ static esp_err_t stream_handler(httpd_req_t *req)
     struct v4l2_buffer buf;
     char part_header[128];
     esp_err_t ret = ESP_OK;
+    int frame_count = 0;
+    int dqbuf_errors = 0;
 
     ESP_LOGI(TAG, "Stream client connected");
 
@@ -180,6 +196,7 @@ static esp_err_t stream_handler(httpd_req_t *req)
 
     while (true) {
         if (xSemaphoreTake(s_camera.sem, pdMS_TO_TICKS(1000)) != pdTRUE) {
+            ESP_LOGW(TAG, "Semaphore timeout");
             continue;
         }
 
@@ -188,9 +205,20 @@ static esp_err_t stream_handler(httpd_req_t *req)
         buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         buf.memory = V4L2_MEMORY_MMAP;
 
+        ESP_LOGD(TAG, "Waiting for frame (DQBUF)...");
         if (ioctl(s_camera.fd, VIDIOC_DQBUF, &buf) != 0) {
+            dqbuf_errors++;
+            if (dqbuf_errors <= 5 || dqbuf_errors % 100 == 0) {
+                ESP_LOGE(TAG, "DQBUF failed (errno=%d), errors=%d", errno, dqbuf_errors);
+            }
             xSemaphoreGive(s_camera.sem);
+            vTaskDelay(pdMS_TO_TICKS(10));
             continue;
+        }
+
+        frame_count++;
+        if (frame_count <= 3 || frame_count % 30 == 0) {
+            ESP_LOGI(TAG, "Frame %d: size=%"PRIu32" bytes", frame_count, buf.bytesused);
         }
 
         /* Send part header */

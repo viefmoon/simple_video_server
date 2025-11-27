@@ -23,7 +23,6 @@ import requests
 import time
 import threading
 from queue import Queue
-import struct
 
 # IMX662 sensor configuration
 DEFAULT_WIDTH = 1936
@@ -132,21 +131,31 @@ class RawBayerDecoder:
         return bayer_img
 
     def auto_decode(self, raw_data):
-        """Auto-detect format based on data size and decode"""
+        """Auto-detect format based on data size and decode (cached after first detection)"""
         data_len = len(raw_data)
 
-        # Check which format matches
+        # Use cached format if available
+        if hasattr(self, '_cached_format'):
+            if self._cached_format == 'packed':
+                return self.decode_raw10_packed(raw_data)
+            elif self._cached_format == 'raw16':
+                return self.decode_raw16(raw_data)
+
+        # Check which format matches (first frame only)
         if abs(data_len - self.frame_size_packed) < 1000:
             print(f"Detected RAW10 packed format ({data_len} bytes)")
+            self._cached_format = 'packed'
             return self.decode_raw10_packed(raw_data)
         elif abs(data_len - self.frame_size_unpacked) < 1000:
             print(f"Detected RAW10 in 16-bit container ({data_len} bytes)")
+            self._cached_format = 'raw16'
             return self.decode_raw16(raw_data)
         else:
             print(f"Unknown format: {data_len} bytes")
             print(f"  Expected packed: {self.frame_size_packed}")
             print(f"  Expected 16-bit: {self.frame_size_unpacked}")
             # Try packed format as fallback
+            self._cached_format = 'packed'
             return self.decode_raw10_packed(raw_data)
 
     def debayer_rggb(self, bayer_img, pattern='RG'):
@@ -193,11 +202,12 @@ class RawBayerDecoder:
         if bayer is None:
             return None
 
-        # Debug: print min/max pixel values for first frame
+        # Debug: print min/max pixel values for first frame only
         if not hasattr(self, '_debug_printed'):
             self._debug_printed = True
-            print(f"Bayer stats: min={bayer.min()}, max={bayer.max()}, mean={bayer.mean():.1f}")
-            if bayer.max() > 900:
+            bayer_min, bayer_max, bayer_mean = bayer.min(), bayer.max(), bayer.mean()
+            print(f"Bayer stats: min={bayer_min}, max={bayer_max}, mean={bayer_mean:.1f}")
+            if bayer_max > 900:
                 print("WARNING: Image may be overexposed (max > 900 on 10-bit scale)")
 
         rgb = self.debayer_rggb(bayer, pattern)
@@ -223,70 +233,82 @@ class RawStreamViewer:
         self.host = host
         self.port = port
         self.decoder = RawBayerDecoder(width, height)
-        self.frame_queue = Queue(maxsize=2)
+        self.frame_queue = Queue(maxsize=8)
         self.running = False
         self.fps = 0
         self.frame_count = 0
-
-    def fetch_frame_http(self):
-        """Fetch single frame via HTTP binary endpoint"""
-        try:
-            url = f"http://{self.host}:{self.port}/api/capture_binary?source=0"
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                return response.content
-        except Exception as e:
-            print(f"HTTP error: {e}")
-        return None
-
-    def fetch_stream_http(self):
-        """Fetch continuous stream via HTTP (multipart)"""
-        url = f"http://{self.host}:{self.port}/stream"
-        try:
-            response = requests.get(url, stream=True, timeout=10)
-            boundary = b'--' + b'123456789000000000000987654321'  # Default boundary
-
-            buffer = b''
-            for chunk in response.iter_content(chunk_size=8192):
-                buffer += chunk
-
-                # Look for frame boundaries
-                while boundary in buffer:
-                    parts = buffer.split(boundary, 1)
-                    frame_data = parts[0]
-                    buffer = parts[1] if len(parts) > 1 else b''
-
-                    # Extract binary data (skip headers)
-                    if b'\r\n\r\n' in frame_data:
-                        _, data = frame_data.split(b'\r\n\r\n', 1)
-                        # Accept both packed and unpacked sizes
-                        min_size = self.decoder.frame_size_packed
-                        if len(data) >= min_size:
-                            yield data
-
-        except Exception as e:
-            print(f"Stream error: {e}")
+        self.last_frame = None  # Keep last frame to avoid "waiting" screen
 
     def receiver_thread(self):
-        """Background thread to receive frames"""
+        """Background thread using continuous streaming"""
         last_time = time.time()
         frame_count = 0
+        debug_count = 0
+
+        url = f"http://{self.host}:{self.port}/stream"
+        boundary = b'--raw_frame_boundary'
+        min_size = self.decoder.frame_size_packed
+
+        print(f"Expected frame size: {min_size} bytes")
 
         while self.running:
-            raw_data = self.fetch_frame_http()
-            if raw_data:
-                # Don't block if queue is full (drop frames)
-                if not self.frame_queue.full():
-                    self.frame_queue.put(raw_data)
+            try:
+                print(f"Connecting to stream: {url}")
+                response = requests.get(url, stream=True, timeout=10)
+                buffer = b''
+                total_received = 0
 
-                frame_count += 1
-                current_time = time.time()
-                if current_time - last_time >= 1.0:
-                    self.fps = frame_count / (current_time - last_time)
-                    frame_count = 0
-                    last_time = current_time
-            else:
-                time.sleep(0.1)  # Wait before retry
+                for chunk in response.iter_content(chunk_size=65536):
+                    if not self.running:
+                        break
+
+                    buffer += chunk
+                    total_received += len(chunk)
+
+                    # Debug: show buffer size periodically
+                    debug_count += 1
+                    if debug_count % 50 == 0:
+                        print(f"Buffer: {len(buffer)} bytes, total received: {total_received}")
+                        # Check if boundary exists
+                        if boundary in buffer:
+                            print(f"  Found boundary in buffer!")
+                        else:
+                            # Show first 200 bytes to see what we're getting
+                            print(f"  First 200 bytes: {buffer[:200]}")
+
+                    # Look for frame boundaries
+                    while boundary in buffer:
+                        parts = buffer.split(boundary, 1)
+                        frame_data = parts[0]
+                        buffer = parts[1] if len(parts) > 1 else b''
+
+                        # Extract binary data (skip headers)
+                        if b'\r\n\r\n' in frame_data:
+                            _, data = frame_data.split(b'\r\n\r\n', 1)
+                            # Don't strip - raw data might end with \r\n
+
+                            print(f"Frame data size: {len(data)} (need {min_size})")
+
+                            if len(data) >= min_size:
+                                # Drop oldest frame if queue full
+                                if self.frame_queue.full():
+                                    try:
+                                        self.frame_queue.get_nowait()
+                                    except:
+                                        pass
+                                self.frame_queue.put(data[:min_size])  # Take exact size
+
+                                frame_count += 1
+                                current_time = time.time()
+                                if current_time - last_time >= 1.0:
+                                    self.fps = frame_count / (current_time - last_time)
+                                    print(f"FPS: {self.fps:.1f}")
+                                    frame_count = 0
+                                    last_time = current_time
+
+            except Exception as e:
+                print(f"Stream error: {e}, reconnecting...")
+                time.sleep(0.5)
 
     def run(self, enhance=True, save_frames=False):
         """Main display loop"""
@@ -314,57 +336,64 @@ class RawStreamViewer:
         cv2.resizeWindow('IMX662 RAW Stream', 960, 550)
 
         frame_num = 0
-        while self.running:
-            try:
-                raw_data = self.frame_queue.get(timeout=1.0)
-            except:
-                # Show "waiting" message
-                waiting_img = np.zeros((550, 960, 3), dtype=np.uint8)
-                cv2.putText(waiting_img, "Waiting for frames...", (300, 275),
-                           cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                cv2.imshow('IMX662 RAW Stream', waiting_img)
-                key = cv2.waitKey(100) & 0xFF
-                if key == ord('q'):
-                    break
-                continue
+        last_raw_data = None
+        last_displayed_frame = None
 
-            # Decode and display
+        while self.running:
+            # Try to get new frame, but don't block long
+            try:
+                raw_data = self.frame_queue.get(timeout=0.05)
+                last_raw_data = raw_data
+            except:
+                # No new frame - keep showing last frame
+                raw_data = None
+
             current_pattern = patterns[pattern_idx]
             current_rotation = rotations[rotation_idx]
-            frame = self.decoder.process_frame(raw_data, enhance=enhance,
-                                                pattern=current_pattern,
-                                                rotate=current_rotation)
-            if frame is not None:
-                # Add info overlay
-                info = f"FPS:{self.fps:.1f} Pattern:{current_pattern} Rot:{current_rotation}"
-                cv2.putText(frame, info, (10, 30),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-                cv2.imshow('IMX662 RAW Stream', frame)
-                frame_num += 1
+            # Process new frame if available
+            if raw_data is not None:
+                frame = self.decoder.process_frame(raw_data, enhance=enhance,
+                                                    pattern=current_pattern,
+                                                    rotate=current_rotation)
+                if frame is not None:
+                    last_displayed_frame = frame.copy()
+                    frame_num += 1
+
+            # Display frame (new or last)
+            if last_displayed_frame is not None:
+                display_frame = last_displayed_frame.copy()
+                info = f"FPS:{self.fps:.1f} Pattern:{current_pattern} Rot:{current_rotation}"
+                cv2.putText(display_frame, info, (10, 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.imshow('IMX662 RAW Stream', display_frame)
+            else:
+                # Only show connecting message at startup
+                connecting_img = np.zeros((550, 960, 3), dtype=np.uint8)
+                cv2.putText(connecting_img, "Connecting...", (380, 275),
+                           cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                cv2.imshow('IMX662 RAW Stream', connecting_img)
 
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 break
-            elif key == ord('s'):
+            elif key == ord('s') and last_displayed_frame is not None:
                 # Save current frame
                 filename = f"frame_{frame_num:04d}.jpg"
-                cv2.imwrite(filename, frame)
+                cv2.imwrite(filename, last_displayed_frame)
                 print(f"Saved: {filename}")
-                # Also save RAW
-                raw_filename = f"frame_{frame_num:04d}.raw"
-                with open(raw_filename, 'wb') as f:
-                    f.write(raw_data)
-                print(f"Saved: {raw_filename}")
+                if last_raw_data is not None:
+                    raw_filename = f"frame_{frame_num:04d}.raw"
+                    with open(raw_filename, 'wb') as f:
+                        f.write(last_raw_data)
+                    print(f"Saved: {raw_filename}")
             elif key == ord('e'):
                 enhance = not enhance
                 print(f"Enhancement: {'ON' if enhance else 'OFF'}")
             elif key == ord('p'):
-                # Cycle through Bayer patterns
                 pattern_idx = (pattern_idx + 1) % len(patterns)
                 print(f"Bayer pattern: {patterns[pattern_idx]}")
             elif key == ord('r'):
-                # Cycle through rotations
                 rotation_idx = (rotation_idx + 1) % len(rotations)
                 print(f"Rotation: {rotations[rotation_idx]}°")
 
@@ -436,10 +465,10 @@ def test_with_file(filename, width=DEFAULT_WIDTH, height=DEFAULT_HEIGHT):
 def main():
     parser = argparse.ArgumentParser(description='RAW Bayer Stream Viewer for IMX662')
     parser.add_argument('--host', default='192.168.1.100', help='ESP32 IP address')
-    parser.add_argument('--port', type=int, default=81, help='HTTP port (default: 81)')
+    parser.add_argument('--port', type=int, default=80, help='HTTP port (default: 80)')
     parser.add_argument('--width', type=int, default=DEFAULT_WIDTH, help='Frame width')
     parser.add_argument('--height', type=int, default=DEFAULT_HEIGHT, help='Frame height')
-    parser.add_argument('--no-enhance', action='store_true', help='Disable image enhancement')
+    parser.add_argument('--no-enhance', action='store_true', help='Disable CLAHE enhancement (faster)')
     parser.add_argument('--test-file', help='Test with a saved RAW file instead of streaming')
 
     args = parser.parse_args()

@@ -37,13 +37,18 @@ static const char *TAG = "imx662";
  * - 2 lanes × 720 Mbps = 1440 Mbps total bandwidth
  */
 
-/* ISP info for RAW10 - specifies Bayer pattern */
+/*
+ * ISP info for RAW10 - required for proper ISP initialization.
+ * The ISP can output RAW10 directly (passthrough mode) when we request
+ * V4L2_PIX_FMT_SBGGR10 as output format.
+ * IMX662 native Bayer pattern is RGGB.
+ */
 static const esp_cam_sensor_isp_info_t imx662_isp_info = {
     .isp_v1_info = {
         .version = SENSOR_ISP_INFO_VERSION_DEFAULT,
         .pclk = 74250000,
-        .vts = 1125,   /* VMAX for 1936x1100 */
-        .hts = 2200,   /* HMAX for 1936x1100 */
+        .vts = 1250,   /* VMAX for 1936x1100 @ 30fps */
+        .hts = 1980,   /* HMAX for 1936x1100 @ 30fps */
         .bayer_type = ESP_CAM_SENSOR_BAYER_RGGB,  /* IMX662 native Bayer pattern */
     },
 };
@@ -59,7 +64,7 @@ static const esp_cam_sensor_format_t imx662_format_info[] = {
         .regs = imx662_1920x1080_30fps_2lane_raw12,  /* Register array configures RAW10 via ADBIT */
         .regs_size = sizeof(imx662_1920x1080_30fps_2lane_raw12) / sizeof(imx662_reginfo_t),
         .fps = 30,
-        .isp_info = &imx662_isp_info,  /* Bayer pattern: RGGB */
+        .isp_info = &imx662_isp_info,  /* ISP can output RAW10 directly */
         .mipi_info = {
             .mipi_clk = 720000000,  /* 720 Mbps per lane - matches DATARATE_SEL=0x06 */
             .lane_num = 2,
