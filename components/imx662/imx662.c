@@ -63,7 +63,37 @@ static const esp_cam_sensor_isp_info_t imx662_isp_info = {
 
 static const esp_cam_sensor_format_t imx662_format_info[] = {
     /*
-     * FORMAT 0: RAW10 entrada → RAW8 salida via ISP
+     * FORMAT 0: RAW10 BYPASS - Datos crudos sin procesar
+     *
+     * Esta configuración:
+     *   1. El sensor envía RAW10 por MIPI-CSI (10 bits por pixel)
+     *   2. El ISP está en modo BYPASS - no procesa los datos
+     *   3. Los datos llegan en formato MIPI empaquetado (5 bytes por 4 pixeles)
+     *   4. El patrón Bayer RGGB se conserva intacto con 10 bits de resolución
+     *
+     * Para NDVI/Multiespectral: Máxima fidelidad radiométrica con 10 bits
+     * Ideal para filtros de banda corta y cálculo de índices de vegetación
+     */
+    {
+        .name = "MIPI_2lane_RAW10_BYPASS_1936x1100_30fps",
+        .format = ESP_CAM_SENSOR_PIXFORMAT_RAW10,
+        .port = ESP_CAM_SENSOR_MIPI_CSI,
+        .xclk = 74250000,
+        .width = 1936,
+        .height = 1100,
+        .regs = imx662_1920x1080_30fps_2lane_raw12,
+        .regs_size = sizeof(imx662_1920x1080_30fps_2lane_raw12) / sizeof(imx662_reginfo_t),
+        .fps = 30,
+        .isp_info = NULL,  /* ISP BYPASS - datos RAW10 sin procesar */
+        .mipi_info = {
+            .mipi_clk = 720000000,
+            .lane_num = 2,
+            .line_sync_en = false,
+        },
+        .reserved = NULL,
+    },
+    /*
+     * FORMAT 1: RAW10 entrada → RAW8 salida via ISP (backup)
      *
      * Esta configuración:
      *   1. El sensor envía RAW10 por MIPI-CSI
@@ -71,12 +101,11 @@ static const esp_cam_sensor_format_t imx662_format_info[] = {
      *   3. El patrón Bayer RGGB se conserva intacto
      *   4. Las interrupciones de frame funcionan correctamente
      *
-     * Para NDVI: Los datos RAW8 mantienen la separación espectral
-     * necesaria para calcular (NIR - Red) / (NIR + Red)
+     * Usar si el modo BYPASS tiene problemas
      */
     {
         .name = "MIPI_2lane_RAW10in_RAW8out_1936x1100_30fps",
-        .format = ESP_CAM_SENSOR_PIXFORMAT_RAW10,  /* Entrada del sensor */
+        .format = ESP_CAM_SENSOR_PIXFORMAT_RAW10,
         .port = ESP_CAM_SENSOR_MIPI_CSI,
         .xclk = 74250000,
         .width = 1936,

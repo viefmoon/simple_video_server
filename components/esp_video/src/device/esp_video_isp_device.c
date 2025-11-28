@@ -1923,8 +1923,9 @@ esp_err_t esp_video_isp_start_by_csi(const esp_video_csi_state_t *state, const s
     }
 
     if (state->bypass_isp) {
-        isp_in_color = ISP_COLOR_RAW8;
-        isp_out_color = ISP_COLOR_RGB565;
+        /* PATCH: Use actual sensor color format instead of hardcoded RAW8 */
+        ESP_RETURN_ON_ERROR(isp_get_input_frame_type(state->in_color, &isp_in_color), TAG, "invalid ISP in format for bypass");
+        isp_out_color = isp_in_color;  /* In bypass mode, output = input */
     } else {
         ESP_RETURN_ON_ERROR(isp_get_input_frame_type(state->in_color, &isp_in_color), TAG, "invalid ISP in format");
         ESP_RETURN_ON_ERROR(isp_get_output_frame_type(state->out_color, &isp_out_color), TAG, "invalid ISP out format");
@@ -1942,7 +1943,8 @@ esp_err_t esp_video_isp_start_by_csi(const esp_video_csi_state_t *state, const s
         .clk_hz = ISP_CLK_FREQ_HZ,
         .input_data_color_type = isp_in_color,
         .output_data_color_type = isp_out_color,
-        .bayer_order = state->bayer_order
+        .bayer_order = state->bayer_order,
+        .flags.bypass_isp = state->bypass_isp,  /* PATCH: Tell IDF about bypass mode */
     };
 
     ISP_LOCK(isp_video);
@@ -1967,11 +1969,16 @@ esp_err_t esp_video_isp_start_by_csi(const esp_video_csi_state_t *state, const s
     if (state->bypass_isp) {
         /**
          * IDF-9706
+         * PATCH: hadr_num and vadr_num are now handled by esp_isp_new_processor()
+         * when flags.bypass_isp is set. The IDF calculates h_pixel_num correctly using
+         * in_bits_per_pixel from the actual color format (RAW10=10 bits).
+         *
+         * HOWEVER: isp_en register defaults to 1 (enabled), so we MUST disable it
+         * explicitly for bypass mode to work correctly.
          */
-
-        ISP.frame_cfg.hadr_num = ceil((float)(isp_config.h_res * state->out_bpp) / 32.0) - 1;
-        ISP.frame_cfg.vadr_num = isp_config.v_res - 1;
-        ISP.cntl.isp_en = 0;
+        // ISP.frame_cfg.hadr_num = ceil((float)(isp_config.h_res * state->out_bpp) / 32.0) - 1;
+        // ISP.frame_cfg.vadr_num = isp_config.v_res - 1;
+        ISP.cntl.isp_en = 0;  /* CRITICAL: Disable ISP processing for raw bypass */
     } else {
 #if CONFIG_ESP_VIDEO_ENABLE_ISP_VIDEO_DEVICE
         esp_isp_evt_cbs_t cbs = {

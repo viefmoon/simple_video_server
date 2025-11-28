@@ -61,8 +61,13 @@ idf_component_register(SRCS ${srcs}
                        PRIV_REQUIRES ${priv_requires}
                        REQUIRES ${requires})
 
-include(package_manager)
-cu_pkg_define_version(${CMAKE_CURRENT_LIST_DIR})
+# PATCH: Define version manually since we removed idf_component.yml
+# Version from original esp_video component: 0.8.0
+target_compile_definitions(${COMPONENT_LIB} PUBLIC
+    ESP_VIDEO_VER_MAJOR=0
+    ESP_VIDEO_VER_MINOR=8
+    ESP_VIDEO_VER_PATCH=0
+)
 
 if(CONFIG_ESP_VIDEO_ENABLE_ISP_PIPELINE_CONTROLLER)
     idf_component_optional_requires(PRIVATE "esp_ipa")
