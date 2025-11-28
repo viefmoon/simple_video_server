@@ -54,6 +54,9 @@ static const esp_cam_sensor_isp_info_t imx662_isp_info = {
         .pclk = 74250000,
         .vts = 1250,   /* VMAX for 1936x1100 @ 30fps */
         .hts = 1980,   /* HMAX for 1936x1100 @ 30fps */
+        .tline_ns = 26667,  /* (HMAX*1e9)/PCLK - CRITICO para AE */
+        .gain_def = 0,      /* 0dB ganancia inicial */
+        .exp_def = 937,     /* VMAX-SHR0 = 1250-313 lineas */
         .bayer_type = ESP_CAM_SENSOR_BAYER_RGGB,  /* IMX662 Bayer pattern */
     },
 };
